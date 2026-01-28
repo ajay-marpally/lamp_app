@@ -1037,6 +1037,9 @@ class SupabaseService {
     required List<String> courses,
     required String inviteId,
     String? chaperoneId,
+    String? phone,
+    String? location,
+    DateTime? dateOfBirth,
   }) async {
     // Sign up user
     final authResponse = await client.auth.signUp(
@@ -1059,6 +1062,9 @@ class SupabaseService {
       'interests': interests,
       'courses': courses,
       'chaperone_id': chaperoneId,
+      'phone': phone,
+      'location': location,
+      'date_of_birth': dateOfBirth?.toIso8601String().split('T')[0],
     });
 
     // If protege and chaperone assigned, create relationship

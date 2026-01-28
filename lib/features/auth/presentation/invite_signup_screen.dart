@@ -16,6 +16,9 @@ class _InviteSignupScreenState extends ConsumerState<InviteSignupScreen> {
   final _codeController = TextEditingController();
   final _nameController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _locationController = TextEditingController();
+  DateTime? _dateOfBirth;
   
   bool _isVerifying = false;
   bool _isRegistering = false;
@@ -94,6 +97,9 @@ class _InviteSignupScreenState extends ConsumerState<InviteSignupScreen> {
         courses: _selectedCourses,
         inviteId: _invite!['id'],
         chaperoneId: _invite!['chaperone_id'],
+        phone: _phoneController.text.trim().isNotEmpty ? _phoneController.text.trim() : null,
+        location: _locationController.text.trim().isNotEmpty ? _locationController.text.trim() : null,
+        dateOfBirth: _dateOfBirth,
       );
 
       if (mounted) {
@@ -245,6 +251,58 @@ class _InviteSignupScreenState extends ConsumerState<InviteSignupScreen> {
             border: OutlineInputBorder(),
           ),
           obscureText: true,
+        ),
+        const SizedBox(height: 16),
+
+        // Phone
+        TextField(
+          controller: _phoneController,
+          decoration: const InputDecoration(
+            labelText: 'Phone Number',
+            prefixIcon: Icon(Icons.phone_outlined),
+            border: OutlineInputBorder(),
+          ),
+          keyboardType: TextInputType.phone,
+        ),
+        const SizedBox(height: 16),
+
+        // Location
+        TextField(
+          controller: _locationController,
+          decoration: const InputDecoration(
+            labelText: 'City / Location',
+            prefixIcon: Icon(Icons.location_on_outlined),
+            border: OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Date of Birth
+        InkWell(
+          onTap: () async {
+            final picked = await showDatePicker(
+              context: context,
+              initialDate: DateTime(2000, 1, 1),
+              firstDate: DateTime(1940),
+              lastDate: DateTime.now(),
+            );
+            if (picked != null) {
+              setState(() => _dateOfBirth = picked);
+            }
+          },
+          child: InputDecorator(
+            decoration: const InputDecoration(
+              labelText: 'Date of Birth',
+              prefixIcon: Icon(Icons.cake_outlined),
+              border: OutlineInputBorder(),
+            ),
+            child: Text(
+              _dateOfBirth != null 
+                  ? '${_dateOfBirth!.day}/${_dateOfBirth!.month}/${_dateOfBirth!.year}'
+                  : 'Select date',
+              style: TextStyle(color: _dateOfBirth != null ? null : AppColors.textSecondary),
+            ),
+          ),
         ),
         const SizedBox(height: 24),
 

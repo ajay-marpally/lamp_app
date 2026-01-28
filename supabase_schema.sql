@@ -548,3 +548,27 @@ $$ LANGUAGE plpgsql;
 -- ============================================
 -- PHASE 4 COMPLETE!
 -- ============================================
+
+-- ============================================
+-- ADMIN USER CREATION
+-- Run this to create the first admin
+-- ============================================
+
+INSERT INTO public.users (id, email, name, role)
+VALUES (
+  'b563e0d7-2f17-44ca-b620-bae3cca58284',
+  'shivamarpallyshiva@gmail.com',
+  'Ajay Marpally',
+  'admin'
+) ON CONFLICT (id) DO UPDATE SET role = 'admin';
+
+-- ============================================
+-- PHASE 5: ADDITIONAL PROFILE FIELDS
+-- ============================================
+
+-- Add date_of_birth to users (phone and location already exist)
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS date_of_birth DATE;
+
+-- ============================================
+-- ALL DONE!
+-- ============================================
