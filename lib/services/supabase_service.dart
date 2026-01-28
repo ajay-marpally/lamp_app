@@ -712,4 +712,183 @@ class SupabaseService {
       }
     }
   }
+
+  // ==================== ADMIN METHODS ====================
+
+  /// Get admin stats (total users, proteges, chaperones)
+  static Future<Map<String, int>> getAdminStats() async {
+    final users = await client.from('users').select('role');
+    final userList = List<Map<String, dynamic>>.from(users);
+    
+    return {
+      'users': userList.length,
+      'proteges': userList.where((u) => u['role'] == 'protege').length,
+      'chaperones': userList.where((u) => u['role'] == 'chaperone').length,
+      'admins': userList.where((u) => u['role'] == 'admin').length,
+    };
+  }
+
+  /// Get all users (admin only)
+  static Future<List<Map<String, dynamic>>> getAllUsers() async {
+    final response = await client.from('users').select().order('created_at', ascending: false);
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  /// Create user invite
+  static Future<void> createInvite({required String email, required String role}) async {
+    await client.from('user_invites').insert({
+      'email': email,
+      'role': role,
+      'invited_by': currentUser?.id,
+    });
+    
+    // Send invite email via Supabase Auth
+    await client.auth.signInWithOtp(email: email);
+  }
+
+  /// Get pending invites
+  static Future<List<Map<String, dynamic>>> getPendingInvites() async {
+    final response = await client.from('user_invites').select().order('invited_at', ascending: false);
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  /// Create habit (admin only)
+  static Future<void> createHabit({required String name, String? description}) async {
+    await client.from('habits').insert({
+      'name': name,
+      'description': description,
+      'created_by': currentUser?.id,
+    });
+  }
+
+  /// Get filtered KPIs for export
+  static Future<List<Map<String, dynamic>>> getFilteredKPIs(double taskMin, double habitMin) async {
+    // Get all proteges with their stats
+    final proteges = await client.from('users').select('id, name, email').eq('role', 'protege');
+    final protegeList = List<Map<String, dynamic>>.from(proteges);
+    
+    final results = <Map<String, dynamic>>[];
+    
+    for (final protege in protegeList) {
+      final protegeId = protege['id'];
+      
+      // Calculate task completion
+      final tasks = await client.from('task_assignments').select('status').eq('protege_id', protegeId);
+      final taskList = List<Map<String, dynamic>>.from(tasks);
+      final totalTasks = taskList.length;
+      final completedTasks = taskList.where((t) => t['status'] == 'verified').length;
+      final taskPercent = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0.0;
+      
+      // Calculate habit consistency (days logged in last 30 days)
+      final thirtyDaysAgo = DateTime.now().subtract(const Duration(days: 30));
+      final logs = await client
+          .from('habit_logs')
+          .select('date')
+          .eq('protege_id', protegeId)
+          .gte('date', thirtyDaysAgo.toIso8601String().split('T')[0]);
+      final logList = List<Map<String, dynamic>>.from(logs);
+      final uniqueDays = logList.map((l) => l['date']).toSet().length;
+      final habitPercent = (uniqueDays / 30) * 100;
+      
+      // Apply filters
+      if (taskPercent >= taskMin && habitPercent >= habitMin) {
+        results.add({
+          'name': protege['name'] ?? 'Unknown',
+          'email': protege['email'] ?? '',
+          'task_completion_percent': taskPercent,
+          'habit_consistency_percent': habitPercent,
+        });
+      }
+    }
+    
+    return results;
+  }
+
+  // ==================== COMMUNITY METHODS ====================
+
+  /// Get all posts with user info and vote counts
+  static Future<List<Map<String, dynamic>>> getPosts() async {
+    final response = await client
+        .from('posts')
+        .select('*, users(name)')
+        .order('created_at', ascending: false);
+    
+    final posts = List<Map<String, dynamic>>.from(response);
+    
+    // Get vote counts for each post
+    for (final post in posts) {
+      final reactions = await client
+          .from('post_reactions')
+          .select('reaction_type')
+          .eq('post_id', post['id']);
+      final reactionList = List<Map<String, dynamic>>.from(reactions);
+      post['upvotes'] = reactionList.where((r) => r['reaction_type'] == 'up').length;
+      post['downvotes'] = reactionList.where((r) => r['reaction_type'] == 'down').length;
+      
+      final comments = await client
+          .from('comments')
+          .select('id')
+          .eq('post_id', post['id']);
+      post['comment_count'] = List.from(comments).length;
+    }
+    
+    return posts;
+  }
+
+  /// Create a new post
+  static Future<void> createPost({required String title, required String body}) async {
+    await client.from('posts').insert({
+      'title': title,
+      'body': body,
+      'user_id': currentUser?.id,
+    });
+  }
+
+  /// Vote on a post
+  static Future<void> votePost({required String postId, required String type}) async {
+    final userId = currentUser?.id;
+    if (userId == null) return;
+
+    // Check if user already voted
+    final existing = await client
+        .from('post_reactions')
+        .select()
+        .eq('post_id', postId)
+        .eq('user_id', userId);
+    
+    if (List.from(existing).isNotEmpty) {
+      // Update existing vote
+      await client
+          .from('post_reactions')
+          .update({'reaction_type': type})
+          .eq('post_id', postId)
+          .eq('user_id', userId);
+    } else {
+      // Insert new vote
+      await client.from('post_reactions').insert({
+        'post_id': postId,
+        'user_id': userId,
+        'reaction_type': type,
+      });
+    }
+  }
+
+  /// Get comments for a post
+  static Future<List<Map<String, dynamic>>> getComments(String postId) async {
+    final response = await client
+        .from('comments')
+        .select('*, users(name)')
+        .eq('post_id', postId)
+        .order('created_at', ascending: true);
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  /// Add a comment to a post
+  static Future<void> addComment({required String postId, required String body}) async {
+    await client.from('comments').insert({
+      'post_id': postId,
+      'user_id': currentUser?.id,
+      'body': body,
+    });
+  }
 }

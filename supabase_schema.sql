@@ -230,3 +230,139 @@ INSERT INTO public.habits (name, description) VALUES
 -- ============================================
 -- DONE! Your database is ready.
 -- ============================================
+
+-- ============================================
+-- PHASE 2: ADDITIONAL TABLES
+-- Run this AFTER the initial schema
+-- ============================================
+
+-- ============================================
+-- 10. UPDATE USERS TABLE
+-- ============================================
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS interests TEXT[];
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS courses TEXT[];
+
+-- ============================================
+-- 11. USER INVITES (Admin invites users)
+-- ============================================
+CREATE TABLE IF NOT EXISTS public.user_invites (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('protege', 'chaperone', 'admin')),
+  invited_by UUID REFERENCES public.users(id),
+  invited_at TIMESTAMPTZ DEFAULT now(),
+  expires_at TIMESTAMPTZ NOT NULL DEFAULT (now() + interval '7 days'),
+  accepted_at TIMESTAMPTZ,
+  UNIQUE(email)
+);
+
+ALTER TABLE public.user_invites ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Admins can manage invites" ON public.user_invites
+  FOR ALL USING (
+    EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+  );
+
+CREATE POLICY "Users can view their own invite" ON public.user_invites
+  FOR SELECT USING (email = (SELECT email FROM auth.users WHERE id = auth.uid()));
+
+-- ============================================
+-- 12. COMMUNITY POSTS
+-- ============================================
+CREATE TABLE IF NOT EXISTS public.posts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE public.posts ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Anyone can view posts" ON public.posts
+  FOR SELECT USING (true);
+
+CREATE POLICY "Users can create posts" ON public.posts
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own posts" ON public.posts
+  FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Admins can delete any post" ON public.posts
+  FOR DELETE USING (
+    auth.uid() = user_id OR
+    EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+  );
+
+-- ============================================
+-- 13. POST REACTIONS (upvote/downvote)
+-- ============================================
+CREATE TABLE IF NOT EXISTS public.post_reactions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  post_id UUID NOT NULL REFERENCES public.posts(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  reaction_type TEXT NOT NULL CHECK (reaction_type IN ('up', 'down')),
+  created_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(post_id, user_id)
+);
+
+ALTER TABLE public.post_reactions ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Anyone can view reactions" ON public.post_reactions
+  FOR SELECT USING (true);
+
+CREATE POLICY "Users can manage own reactions" ON public.post_reactions
+  FOR ALL USING (auth.uid() = user_id);
+
+-- ============================================
+-- 14. COMMENTS
+-- ============================================
+CREATE TABLE IF NOT EXISTS public.comments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  post_id UUID NOT NULL REFERENCES public.posts(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  body TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE public.comments ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Anyone can view comments" ON public.comments
+  FOR SELECT USING (true);
+
+CREATE POLICY "Users can create comments" ON public.comments
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users/Admins can delete comments" ON public.comments
+  FOR DELETE USING (
+    auth.uid() = user_id OR
+    EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+  );
+
+-- ============================================
+-- 15. ADMIN KPI VIEW (for analytics)
+-- ============================================
+CREATE OR REPLACE VIEW public.user_kpis AS
+SELECT 
+  u.id,
+  u.name,
+  u.email,
+  u.role,
+  -- Task completion rate
+  COALESCE(
+    (SELECT COUNT(*) FILTER (WHERE status = 'verified') * 100.0 / NULLIF(COUNT(*), 0)
+     FROM public.task_assignments WHERE protege_id = u.id), 0
+  ) as task_completion_percent,
+  -- Habit consistency (days logged / 30)
+  COALESCE(
+    (SELECT COUNT(DISTINCT date) * 100.0 / 30
+     FROM public.habit_logs 
+     WHERE protege_id = u.id AND date >= CURRENT_DATE - 30), 0
+  ) as habit_consistency_percent
+FROM public.users u
+WHERE u.role = 'protege';
+
+-- ============================================
+-- PHASE 2 COMPLETE!
+-- ============================================

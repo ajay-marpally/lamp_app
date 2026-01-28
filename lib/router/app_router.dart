@@ -6,6 +6,8 @@ import '../features/auth/presentation/login_screen.dart';
 import '../features/auth/presentation/signup_screen.dart';
 import '../features/protege/home/protege_home_screen.dart';
 import '../features/chaperone/home/chaperone_home_screen.dart';
+import '../features/admin/admin_dashboard.dart';
+import '../features/community/community_screen.dart';
 
 /// Auth state notifier for GoRouter refresh
 class AuthStateNotifier extends ChangeNotifier {
@@ -60,7 +62,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       // If authenticated and on auth route or root, redirect to appropriate home
       if (isAuthenticated && isAuthRoute) {
         final role = authState.user?.role ?? 'protege';
-        if (role == 'chaperone' || role == 'admin') {
+        if (role == 'admin') {
+          return '/admin';
+        } else if (role == 'chaperone') {
           return '/chaperone';
         }
         return '/protege';
@@ -131,6 +135,18 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const ChaperoneHomeScreen(),
           ),
         ],
+      ),
+
+      // Admin routes
+      GoRoute(
+        path: '/admin',
+        builder: (context, state) => const AdminDashboardScreen(),
+      ),
+
+      // Community route
+      GoRoute(
+        path: '/community',
+        builder: (context, state) => const CommunityScreen(),
       ),
     ],
   );
