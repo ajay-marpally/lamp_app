@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'dart:html' as html;
+import 'dart:io';
 import 'dart:convert';
-import '../../../services/supabase_service.dart';
-import '../../../core/theme/app_theme.dart';
-import '../../auth/data/auth_provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import '../../services/supabase_service.dart';
+import '../../core/theme/app_theme.dart';
+import '../auth/data/auth_provider.dart';
 
 /// Admin Dashboard Screen
 class AdminDashboardScreen extends ConsumerStatefulWidget {
@@ -501,9 +504,11 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       final users = await SupabaseService.getFilteredKPIs(taskMin, habitMin);
       
       if (users.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No users match the criteria'), backgroundColor: AppColors.warning),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No users match the criteria'), backgroundColor: AppColors.warning),
+          );
+        }
         return;
       }
 
@@ -514,22 +519,28 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
         buffer.writeln('${user['name']},${user['email']},${user['task_completion_percent'].toStringAsFixed(1)},${user['habit_consistency_percent'].toStringAsFixed(1)}');
       }
 
-      // Download file (Web)
-      final bytes = utf8.encode(buffer.toString());
-      final blob = html.Blob([bytes]);
-      final url = html.Url.createObjectUrlFromBlob(blob);
-      html.AnchorElement(href: url)
-        ..setAttribute('download', 'lamp_kpis_${DateTime.now().millisecondsSinceEpoch}.csv')
-        ..click();
-      html.Url.revokeObjectUrl(url);
+      // Save and share file
+      final directory = await getTemporaryDirectory();
+      final filePath = '${directory.path}/lamp_kpis_${DateTime.now().millisecondsSinceEpoch}.csv';
+      final file = File(filePath);
+      await file.writeAsString(buffer.toString());
+      
+      await Share.shareXFiles(
+        [XFile(filePath)],
+        text: 'LAMP KPI Export',
+      );
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Exported ${users.length} users'), backgroundColor: AppColors.success),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Exported ${users.length} users'), backgroundColor: AppColors.success),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
+        );
+      }
     }
   }
 

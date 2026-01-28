@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
-import '../../../services/supabase_service.dart';
-import '../../../core/theme/app_theme.dart';
-import '../../auth/data/auth_provider.dart';
+import '../../services/supabase_service.dart';
+import '../../core/theme/app_theme.dart';
+import '../auth/data/auth_provider.dart';
 
 /// Community Forum Screen
 class CommunityScreen extends ConsumerStatefulWidget {

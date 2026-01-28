@@ -38,6 +38,10 @@ dependencies:
   # Media/File Picker
   file_picker: ^8.0.0+1
   image_picker: ^1.1.2
+  
+  # File Export
+  share_plus: ^7.2.2
+  path_provider: ^2.1.4
 
 dev_dependencies:
   flutter_test:
