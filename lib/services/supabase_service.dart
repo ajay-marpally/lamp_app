@@ -891,4 +891,100 @@ class SupabaseService {
       'body': body,
     });
   }
+
+  // ==================== STORAGE METHODS ====================
+
+  /// Upload a file to Supabase Storage
+  /// Returns the public URL of the uploaded file
+  static Future<String?> uploadFile({
+    required String bucket,
+    required String path,
+    required List<int> bytes,
+    String? contentType,
+  }) async {
+    try {
+      final filePath = '${currentUser?.id}/$path';
+      await client.storage.from(bucket).uploadBinary(
+        filePath,
+        bytes as dynamic,
+        fileOptions: FileOptions(contentType: contentType),
+      );
+      
+      // Get public URL
+      final publicUrl = client.storage.from(bucket).getPublicUrl(filePath);
+      return publicUrl;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Create a post with optional media attachments
+  static Future<void> createPostWithMedia({
+    required String title,
+    required String body,
+    List<String>? photoUrls,
+    String? videoUrl,
+    String? documentUrl,
+  }) async {
+    await client.from('posts').insert({
+      'title': title,
+      'body': body,
+      'user_id': currentUser?.id,
+      'photos': photoUrls,
+      'video_url': videoUrl,
+      'document_url': documentUrl,
+    });
+  }
+
+  /// Upload multiple photos and return their URLs
+  static Future<List<String>> uploadPhotos(List<dynamic> files) async {
+    final urls = <String>[];
+    for (int i = 0; i < files.length; i++) {
+      final file = files[i];
+      final bytes = await file.readAsBytes();
+      final extension = file.path.split('.').last;
+      final path = 'posts/${DateTime.now().millisecondsSinceEpoch}_$i.$extension';
+      
+      final url = await uploadFile(
+        bucket: 'media',
+        path: path,
+        bytes: bytes,
+        contentType: 'image/$extension',
+      );
+      if (url != null) urls.add(url);
+    }
+    return urls;
+  }
+
+  /// Upload a video and return its URL
+  static Future<String?> uploadVideo(dynamic file) async {
+    final bytes = await file.readAsBytes();
+    final extension = file.path.split('.').last;
+    final path = 'posts/${DateTime.now().millisecondsSinceEpoch}.$extension';
+    
+    return await uploadFile(
+      bucket: 'media',
+      path: path,
+      bytes: bytes,
+      contentType: 'video/$extension',
+    );
+  }
+
+  /// Upload a document and return its URL
+  static Future<String?> uploadDocument(dynamic file) async {
+    final bytes = await file.readAsBytes();
+    final extension = file.path.split('.').last;
+    final path = 'posts/${DateTime.now().millisecondsSinceEpoch}.$extension';
+    
+    String contentType = 'application/octet-stream';
+    if (extension == 'pdf') contentType = 'application/pdf';
+    if (extension == 'doc' || extension == 'docx') contentType = 'application/msword';
+    
+    return await uploadFile(
+      bucket: 'media',
+      path: path,
+      bytes: bytes,
+      contentType: contentType,
+    );
+  }
 }

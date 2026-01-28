@@ -366,3 +366,42 @@ WHERE u.role = 'protege';
 -- ============================================
 -- PHASE 2 COMPLETE!
 -- ============================================
+
+-- ============================================
+-- PHASE 3: MEDIA STORAGE
+-- Run this AFTER Phase 2
+-- ============================================
+
+-- Add media columns to posts
+ALTER TABLE public.posts ADD COLUMN IF NOT EXISTS photos TEXT[];
+ALTER TABLE public.posts ADD COLUMN IF NOT EXISTS video_url TEXT;
+ALTER TABLE public.posts ADD COLUMN IF NOT EXISTS document_url TEXT;
+
+-- Create storage bucket for media
+-- NOTE: Run this in Supabase Dashboard > Storage > New Bucket
+-- Bucket name: media
+-- Public: Yes (for easy access)
+-- Or use SQL:
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('media', 'media', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Storage RLS policies
+CREATE POLICY "Anyone can view media" ON storage.objects
+  FOR SELECT USING (bucket_id = 'media');
+
+CREATE POLICY "Authenticated users can upload media" ON storage.objects
+  FOR INSERT WITH CHECK (
+    bucket_id = 'media' AND
+    auth.role() = 'authenticated'
+  );
+
+CREATE POLICY "Users can delete own media" ON storage.objects
+  FOR DELETE USING (
+    bucket_id = 'media' AND
+    auth.uid()::text = (storage.foldername(name))[1]
+  );
+
+-- ============================================
+-- PHASE 3 COMPLETE!
+-- ============================================

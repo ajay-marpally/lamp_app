@@ -34,6 +34,10 @@ dependencies:
   shimmer: ^3.0.0
   flutter_local_notifications: ^20.0.0
   timezone: ^0.10.1
+  
+  # Media/File Picker
+  file_picker: ^8.0.0+1
+  image_picker: ^1.1.2
 
 dev_dependencies:
   flutter_test:
