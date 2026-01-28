@@ -405,3 +405,146 @@ CREATE POLICY "Users can delete own media" ON storage.objects
 -- ============================================
 -- PHASE 3 COMPLETE!
 -- ============================================
+
+-- ============================================
+-- PHASE 4: INVITE SYSTEM & MATCHING
+-- Run this AFTER Phase 3
+-- ============================================
+
+-- Add invite code to user_invites
+ALTER TABLE public.user_invites ADD COLUMN IF NOT EXISTS invite_code TEXT;
+ALTER TABLE public.user_invites ADD COLUMN IF NOT EXISTS chaperone_id UUID REFERENCES public.users(id);
+
+-- Create unique index for invite lookup
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_invites_code ON public.user_invites(invite_code) WHERE invite_code IS NOT NULL;
+
+-- Predefined interests (admin-managed)
+CREATE TABLE IF NOT EXISTS public.predefined_interests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL UNIQUE,
+  description TEXT,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE public.predefined_interests ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Anyone can view interests" ON public.predefined_interests
+  FOR SELECT USING (true);
+
+CREATE POLICY "Admins can manage interests" ON public.predefined_interests
+  FOR ALL USING (
+    EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+  );
+
+-- Predefined courses (admin-managed)
+CREATE TABLE IF NOT EXISTS public.predefined_courses (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL UNIQUE,
+  description TEXT,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE public.predefined_courses ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Anyone can view courses" ON public.predefined_courses
+  FOR SELECT USING (true);
+
+CREATE POLICY "Admins can manage courses" ON public.predefined_courses
+  FOR ALL USING (
+    EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+  );
+
+-- Insert default interests
+INSERT INTO public.predefined_interests (name, description) VALUES
+  ('Meditation', 'Daily meditation practice'),
+  ('Spirituality', 'Spiritual growth and development'),
+  ('Mindfulness', 'Being present and aware'),
+  ('Yoga', 'Physical and mental wellness'),
+  ('Reading', 'Spiritual literature'),
+  ('Service', 'Helping others'),
+  ('Nature', 'Connecting with nature')
+ON CONFLICT (name) DO NOTHING;
+
+-- Insert default courses
+INSERT INTO public.predefined_courses (name, description) VALUES
+  ('Heartfulness Masterclass', 'Core meditation techniques'),
+  ('Relaxation', 'Stress management'),
+  ('Cleaning', 'Removing impressions'),
+  ('Introduction to Meditation', 'Beginner course'),
+  ('Advanced Practices', 'Deepening your practice')
+ON CONFLICT (name) DO NOTHING;
+
+-- Function to generate invite code
+CREATE OR REPLACE FUNCTION generate_invite_code()
+RETURNS TEXT AS $$
+DECLARE
+  chars TEXT := 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  result TEXT := '';
+  i INTEGER;
+BEGIN
+  FOR i IN 1..8 LOOP
+    result := result || substr(chars, floor(random() * length(chars) + 1)::INTEGER, 1);
+  END LOOP;
+  RETURN result;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger to auto-generate invite code
+CREATE OR REPLACE FUNCTION set_invite_code()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.invite_code IS NULL THEN
+    NEW.invite_code := generate_invite_code();
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_set_invite_code ON public.user_invites;
+CREATE TRIGGER trigger_set_invite_code
+  BEFORE INSERT ON public.user_invites
+  FOR EACH ROW
+  EXECUTE FUNCTION set_invite_code();
+
+-- Auto-matching function (finds best chaperone based on interests)
+CREATE OR REPLACE FUNCTION find_best_chaperone(protege_interests TEXT[])
+RETURNS UUID AS $$
+DECLARE
+  best_chaperone UUID;
+BEGIN
+  SELECT u.id INTO best_chaperone
+  FROM public.users u
+  LEFT JOIN public.chaperone_protege cp ON cp.chaperone_id = u.id
+  WHERE u.role = 'chaperone'
+  GROUP BY u.id, u.interests
+  HAVING COUNT(cp.id) < 5  -- Max 5 proteges
+  ORDER BY 
+    COALESCE(array_length(ARRAY(SELECT unnest(u.interests) INTERSECT SELECT unnest(protege_interests)), 1), 0) DESC,
+    COUNT(cp.id) ASC  -- Prefer less loaded chaperones
+  LIMIT 1;
+  
+  RETURN best_chaperone;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ============================================
+-- BOOTSTRAP: CREATE FIRST ADMIN USER
+-- Replace with your actual email after signing up!
+-- ============================================
+-- Step 1: Sign up with email/password in the app
+-- Step 2: Run this SQL (replace YOUR_USER_ID):
+-- 
+-- UPDATE public.users 
+-- SET role = 'admin' 
+-- WHERE id = 'YOUR_USER_ID';
+--
+-- OR if user doesn't exist yet, insert manually:
+-- INSERT INTO public.users (id, email, name, role)
+-- VALUES ('YOUR_AUTH_USER_ID', 'admin@example.com', 'Admin', 'admin');
+-- ============================================
+
+-- ============================================
+-- PHASE 4 COMPLETE!
+-- ============================================

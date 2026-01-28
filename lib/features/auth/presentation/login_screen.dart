@@ -155,6 +155,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     ),
                   ],
                 ),
+                
+                // Invite link
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      "Have an invite? ",
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    TextButton(
+                      onPressed: () => context.push('/invite'),
+                      child: const Text('Join Here'),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),

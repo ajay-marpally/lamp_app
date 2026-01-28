@@ -8,6 +8,7 @@ import '../features/protege/home/protege_home_screen.dart';
 import '../features/chaperone/home/chaperone_home_screen.dart';
 import '../features/admin/admin_dashboard.dart';
 import '../features/community/community_screen.dart';
+import '../features/auth/presentation/invite_signup_screen.dart';
 
 /// Auth state notifier for GoRouter refresh
 class AuthStateNotifier extends ChangeNotifier {
@@ -47,6 +48,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       // Auth routes
       final isAuthRoute = currentPath == '/login' || 
           currentPath == '/signup' ||
+          currentPath == '/invite' ||
           currentPath == '/';
 
       // If not authenticated and trying to access protected route
@@ -87,6 +89,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/signup',
         builder: (context, state) => const SignupScreen(),
+      ),
+      GoRoute(
+        path: '/invite',
+        builder: (context, state) => const InviteSignupScreen(),
       ),
 
       // Protege routes

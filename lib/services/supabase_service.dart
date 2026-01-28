@@ -987,4 +987,184 @@ class SupabaseService {
       contentType: contentType,
     );
   }
+
+  // ==================== INVITE SYSTEM ====================
+
+  /// Verify invite by email and code
+  static Future<Map<String, dynamic>?> verifyInvite({
+    required String email,
+    required String code,
+  }) async {
+    final response = await client
+        .from('user_invites')
+        .select()
+        .eq('email', email)
+        .eq('invite_code', code)
+        .isFilter('accepted_at', null)
+        .gte('expires_at', DateTime.now().toIso8601String())
+        .maybeSingle();
+    
+    return response;
+  }
+
+  /// Get predefined interests
+  static Future<List<Map<String, dynamic>>> getPredefinedInterests() async {
+    final response = await client
+        .from('predefined_interests')
+        .select()
+        .eq('is_active', true)
+        .order('name');
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  /// Get predefined courses
+  static Future<List<Map<String, dynamic>>> getPredefinedCourses() async {
+    final response = await client
+        .from('predefined_courses')
+        .select()
+        .eq('is_active', true)
+        .order('name');
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  /// Complete invite registration
+  static Future<void> completeInviteRegistration({
+    required String email,
+    required String password,
+    required String name,
+    required String role,
+    required List<String> interests,
+    required List<String> courses,
+    required String inviteId,
+    String? chaperoneId,
+  }) async {
+    // Sign up user
+    final authResponse = await client.auth.signUp(
+      email: email,
+      password: password,
+    );
+
+    if (authResponse.user == null) {
+      throw Exception('Failed to create account');
+    }
+
+    final userId = authResponse.user!.id;
+
+    // Create user profile
+    await client.from('users').insert({
+      'id': userId,
+      'email': email,
+      'name': name,
+      'role': role,
+      'interests': interests,
+      'courses': courses,
+      'chaperone_id': chaperoneId,
+    });
+
+    // If protege and chaperone assigned, create relationship
+    if (role == 'protege' && chaperoneId != null) {
+      await client.from('chaperone_protege').insert({
+        'chaperone_id': chaperoneId,
+        'protege_id': userId,
+        'protege_name': name,
+      });
+    }
+
+    // Mark invite as accepted
+    await client.from('user_invites').update({
+      'accepted_at': DateTime.now().toIso8601String(),
+    }).eq('id', inviteId);
+
+    // Sign out (user needs to login fresh)
+    await client.auth.signOut();
+  }
+
+  /// Create invite with optional chaperone assignment
+  static Future<Map<String, dynamic>> createInviteWithCode({
+    required String email,
+    required String role,
+    String? chaperoneId,
+  }) async {
+    final response = await client.from('user_invites').insert({
+      'email': email,
+      'role': role,
+      'invited_by': currentUser?.id,
+      'chaperone_id': chaperoneId,
+    }).select().single();
+    
+    return response;
+  }
+
+  /// Admin: Add interest
+  static Future<void> addInterest(String name, String? description) async {
+    await client.from('predefined_interests').insert({
+      'name': name,
+      'description': description,
+    });
+  }
+
+  /// Admin: Add course
+  static Future<void> addCourse(String name, String? description) async {
+    await client.from('predefined_courses').insert({
+      'name': name,
+      'description': description,
+    });
+  }
+
+  /// Get chaperone details for protege
+  static Future<Map<String, dynamic>?> getChaperoneDetails(String chaperoneId) async {
+    final response = await client
+        .from('users')
+        .select('id, name, email, phone, location')
+        .eq('id', chaperoneId)
+        .maybeSingle();
+    return response;
+  }
+
+  /// Get available chaperones (with less than 5 proteges)
+  static Future<List<Map<String, dynamic>>> getAvailableChaperones() async {
+    final chaperones = await client
+        .from('users')
+        .select('id, name, email, interests')
+        .eq('role', 'chaperone');
+    
+    final chaperoneList = List<Map<String, dynamic>>.from(chaperones);
+    
+    // Filter to those with < 5 proteges
+    final available = <Map<String, dynamic>>[];
+    for (final chap in chaperoneList) {
+      final proteges = await client
+          .from('chaperone_protege')
+          .select('id')
+          .eq('chaperone_id', chap['id']);
+      if (List.from(proteges).length < 5) {
+        chap['protege_count'] = List.from(proteges).length;
+        available.add(chap);
+      }
+    }
+    
+    return available;
+  }
+
+  /// Assign protege to chaperone (admin/manual)
+  static Future<void> assignProtegeToChaperone({
+    required String protegeId,
+    required String chaperoneId,
+    required String protegeName,
+  }) async {
+    // Remove existing assignment if any
+    await client.from('chaperone_protege').delete().eq('protege_id', protegeId);
+    
+    // Create new assignment
+    await client.from('chaperone_protege').insert({
+      'chaperone_id': chaperoneId,
+      'protege_id': protegeId,
+      'protege_name': protegeName,
+    });
+    
+    // Update user's chaperone_id
+    await client.from('users').update({
+      'chaperone_id': chaperoneId,
+    }).eq('id', protegeId);
+  }
 }
