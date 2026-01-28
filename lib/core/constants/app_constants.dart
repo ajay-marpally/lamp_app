@@ -4,10 +4,10 @@ class SupabaseConfig {
   SupabaseConfig._();
 
   // Supabase project URL
-  static const String supabaseUrl = 'https://gmrqcoisfoghljwqiuys.supabase.co';
+  static const String supabaseUrl = 'https://twzrmmheyokdktmnszno.supabase.co';
   
   // Supabase anon key
-  static const String supabaseAnonKey = 'sb_publishable_32HScVBfGlv4rNKr8kx-1A_dOyIPLEV';
+  static const String supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR3enJtbWhleW9rZGt0bW5zem5vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk2MTY2OTUsImV4cCI6MjA4NTE5MjY5NX0.yBAF7QRK33deuCZgi_2l5jjJTBGoA161kpElEUzOybU';
 }
 
 /// App Configuration
